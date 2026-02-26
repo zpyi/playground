@@ -1,0 +1,1330 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Transformer 原理动画讲解</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Noto+Sans+SC:wght@300;400;600;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0a0f1a;
+      --bg-secondary: #111827;
+      --fg: #f1f5f9;
+      --muted: #64748b;
+      --accent: #10b981;
+      --accent-secondary: #f59e0b;
+      --card: rgba(17, 24, 39, 0.8);
+      --border: rgba(100, 116, 139, 0.3);
+      --glow: rgba(16, 185, 129, 0.4);
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Noto Sans SC', sans-serif;
+      background: var(--bg);
+      color: var(--fg);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    .font-mono {
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* Background Canvas */
+    #bgCanvas {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 0;
+      pointer-events: none;
+    }
+
+    /* Main Container */
+    .main-container {
+      position: relative;
+      z-index: 1;
+    }
+
+    /* Step Navigation */
+    .step-nav {
+      display: flex;
+      gap: 8px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    .step-btn {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      border: 2px solid var(--border);
+      background: var(--card);
+      color: var(--muted);
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      backdrop-filter: blur(10px);
+    }
+
+    .step-btn:hover {
+      border-color: var(--accent);
+      color: var(--fg);
+    }
+
+    .step-btn.active {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: var(--bg);
+      box-shadow: 0 0 20px var(--glow);
+    }
+
+    .step-btn.completed {
+      background: rgba(16, 185, 129, 0.2);
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    /* Architecture Diagram */
+    .arch-container {
+      position: relative;
+      width: 100%;
+      max-width: 900px;
+      margin: 0 auto;
+    }
+
+    .arch-block {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px 24px;
+      text-align: center;
+      backdrop-filter: blur(10px);
+      transition: all 0.5s ease;
+      opacity: 0;
+      transform: translateY(20px);
+    }
+
+    .arch-block.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .arch-block.highlight {
+      border-color: var(--accent);
+      box-shadow: 0 0 30px var(--glow);
+    }
+
+    /* Attention Matrix */
+    .attention-grid {
+      display: grid;
+      gap: 4px;
+      margin: 20px auto;
+    }
+
+    .attention-cell {
+      width: 50px;
+      height: 50px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: 600;
+      transition: all 0.3s ease;
+      cursor: pointer;
+    }
+
+    .attention-cell:hover {
+      transform: scale(1.1);
+      z-index: 10;
+    }
+
+    /* Flow Particles */
+    .particle-flow {
+      position: absolute;
+      width: 8px;
+      height: 8px;
+      background: var(--accent);
+      border-radius: 50%;
+      box-shadow: 0 0 10px var(--accent);
+    }
+
+    /* Formula Display */
+    .formula {
+      font-family: 'JetBrains Mono', monospace;
+      background: rgba(16, 185, 129, 0.1);
+      border: 1px solid var(--accent);
+      border-radius: 8px;
+      padding: 16px 24px;
+      display: inline-block;
+      margin: 16px 0;
+    }
+
+    /* Progress Bar */
+    .progress-track {
+      height: 4px;
+      background: var(--border);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent), var(--accent-secondary));
+      border-radius: 2px;
+      transition: width 0.5s ease;
+    }
+
+    /* Animated SVG connections */
+    .connection-line {
+      stroke: var(--accent);
+      stroke-width: 2;
+      fill: none;
+      stroke-dasharray: 8 4;
+      animation: dash 1s linear infinite;
+    }
+
+    @keyframes dash {
+      to {
+        stroke-dashoffset: -12;
+      }
+    }
+
+    /* Matrix Animation */
+    .matrix-value {
+      animation: fadeInValue 0.5s ease forwards;
+      opacity: 0;
+    }
+
+    @keyframes fadeInValue {
+      to {
+        opacity: 1;
+      }
+    }
+
+    /* Text highlight */
+    .text-highlight {
+      position: relative;
+      display: inline-block;
+    }
+
+    .text-highlight::after {
+      content: '';
+      position: absolute;
+      bottom: -2px;
+      left: 0;
+      width: 100%;
+      height: 3px;
+      background: var(--accent);
+      transform: scaleX(0);
+      transform-origin: left;
+      transition: transform 0.5s ease;
+    }
+
+    .text-highlight.active::after {
+      transform: scaleX(1);
+    }
+
+    /* Scroll indicator */
+    .scroll-hint {
+      animation: bounce 2s ease infinite;
+    }
+
+    @keyframes bounce {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(10px); }
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .attention-cell {
+        width: 36px;
+        height: 36px;
+        font-size: 10px;
+      }
+      
+      .arch-block {
+        padding: 12px 16px;
+        font-size: 14px;
+      }
+    }
+
+    /* Reduced motion */
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
+
+    /* Token visualization */
+    .token {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 8px 16px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      margin: 4px;
+      transition: all 0.3s ease;
+    }
+
+    .token.active {
+      border-color: var(--accent);
+      box-shadow: 0 0 15px var(--glow);
+    }
+
+    .token.processing {
+      background: rgba(16, 185, 129, 0.2);
+      border-color: var(--accent);
+    }
+
+    /* Vector bars */
+    .vector-bar {
+      height: 8px;
+      border-radius: 4px;
+      background: linear-gradient(90deg, var(--accent), var(--accent-secondary));
+      transition: width 0.5s ease;
+    }
+
+    /* Multi-head attention visualization */
+    .head-container {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 16px;
+    }
+
+    .attention-head {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      transition: all 0.3s ease;
+    }
+
+    .attention-head:hover {
+      border-color: var(--accent);
+      transform: translateY(-4px);
+    }
+
+    .head-label {
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+
+    /* Positional encoding wave */
+    .pe-wave {
+      position: relative;
+      height: 60px;
+      margin: 20px 0;
+    }
+
+    .pe-wave canvas {
+      width: 100%;
+      height: 100%;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="bgCanvas"></canvas>
+  
+  <div class="main-container">
+    <!-- Header -->
+    <header class="py-8 px-4 text-center">
+      <h1 class="text-4xl md:text-5xl font-extrabold mb-4" style="letter-spacing: -0.02em;">
+        <span class="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-amber-400">Transformer</span>
+        原理动画讲解
+      </h1>
+      <p class="text-lg text-slate-400 max-w-2xl mx-auto">
+        通过交互式动画，深入理解Transformer架构的核心机制
+      </p>
+    </header>
+
+    <!-- Progress -->
+    <div class="max-w-3xl mx-auto px-4 mb-8">
+      <div class="progress-track">
+        <div class="progress-fill" id="progressFill" style="width: 0%"></div>
+      </div>
+      <div class="flex justify-between mt-2 text-sm text-slate-500">
+        <span>开始</span>
+        <span id="stepIndicator">步骤 1 / 6</span>
+        <span>完成</span>
+      </div>
+    </div>
+
+    <!-- Step Navigation -->
+    <nav class="step-nav mb-8 px-4" aria-label="步骤导航">
+      <button class="step-btn active" data-step="1" aria-label="步骤1: 概述">1</button>
+      <button class="step-btn" data-step="2" aria-label="步骤2: 嵌入">2</button>
+      <button class="step-btn" data-step="3" aria-label="步骤3: 位置编码">3</button>
+      <button class="step-btn" data-step="4" aria-label="步骤4: 自注意力">4</button>
+      <button class="step-btn" data-step="5" aria-label="步骤5: 多头注意力">5</button>
+      <button class="step-btn" data-step="6" aria-label="步骤6: 完整流程">6</button>
+    </nav>
+
+    <!-- Main Content Area -->
+    <main class="max-w-5xl mx-auto px-4 pb-16">
+      
+      <!-- Step 1: Overview -->
+      <section id="step1" class="step-content">
+        <div class="text-center mb-12">
+          <h2 class="text-3xl font-bold mb-4">什么是 Transformer?</h2>
+          <p class="text-slate-400 max-w-2xl mx-auto">
+            Transformer是一种革命性的神经网络架构，于2017年在论文"Attention Is All You Need"中提出。
+            它完全依赖注意力机制，摒弃了传统的循环和卷积结构。
+          </p>
+        </div>
+
+        <div class="arch-container">
+          <svg id="archSvg" width="100%" height="500" viewBox="0 0 400 500">
+            <!-- Encoder Stack -->
+            <g id="encoderGroup">
+              <rect x="50" y="50" width="120" height="400" rx="12" 
+                    fill="rgba(17, 24, 39, 0.8)" stroke="rgba(100, 116, 139, 0.3)" stroke-width="1"/>
+              <text x="110" y="30" text-anchor="middle" fill="#64748b" font-size="12">ENCODER</text>
+              
+              <!-- Encoder blocks -->
+              <rect id="enc1" x="60" y="280" width="100" height="50" rx="8" 
+                    fill="rgba(16, 185, 129, 0.1)" stroke="#10b981" stroke-width="1" opacity="0"/>
+              <text x="110" y="310" text-anchor="middle" fill="#10b981" font-size="10">Multi-Head Attention</text>
+              
+              <rect id="enc2" x="60" y="200" width="100" height="50" rx="8" 
+                    fill="rgba(245, 158, 11, 0.1)" stroke="#f59e0b" stroke-width="1" opacity="0"/>
+              <text x="110" y="230" text-anchor="middle" fill="#f59e0b" font-size="10">Add & Norm</text>
+              
+              <rect id="enc3" x="60" y="120" width="100" height="50" rx="8" 
+                    fill="rgba(16, 185, 129, 0.1)" stroke="#10b981" stroke-width="1" opacity="0"/>
+              <text x="110" y="150" text-anchor="middle" fill="#10b981" font-size="10">Feed Forward</text>
+            </g>
+
+            <!-- Decoder Stack -->
+            <g id="decoderGroup">
+              <rect x="230" y="50" width="120" height="400" rx="12" 
+                    fill="rgba(17, 24, 39, 0.8)" stroke="rgba(100, 116, 139, 0.3)" stroke-width="1"/>
+              <text x="290" y="30" text-anchor="middle" fill="#64748b" font-size="12">DECODER</text>
+              
+              <rect id="dec1" x="240" y="340" width="100" height="40" rx="8" 
+                    fill="rgba(16, 185, 129, 0.1)" stroke="#10b981" stroke-width="1" opacity="0"/>
+              <text x="290" y="365" text-anchor="middle" fill="#10b981" font-size="9">Masked Attention</text>
+              
+              <rect id="dec2" x="240" y="260" width="100" height="40" rx="8" 
+                    fill="rgba(245, 158, 11, 0.1)" stroke="#f59e0b" stroke-width="1" opacity="0"/>
+              <text x="290" y="285" text-anchor="middle" fill="#f59e0b" font-size="9">Cross Attention</text>
+              
+              <rect id="dec3" x="240" y="180" width="100" height="40" rx="8" 
+                    fill="rgba(16, 185, 129, 0.1)" stroke="#10b981" stroke-width="1" opacity="0"/>
+              <text x="290" y="205" text-anchor="middle" fill="#10b981" font-size="9">Feed Forward</text>
+              
+              <rect id="dec4" x="240" y="100" width="100" height="40" rx="8" 
+                    fill="rgba(100, 116, 139, 0.2)" stroke="#64748b" stroke-width="1" opacity="0"/>
+              <text x="290" y="125" text-anchor="middle" fill="#94a3b8" font-size="9">Linear + Softmax</text>
+            </g>
+
+            <!-- Connection arrow -->
+            <path id="connection" class="connection-line" d="M170 300 Q200 300 220 280 L230 280" opacity="0"/>
+            
+            <!-- Flow particles -->
+            <g id="particles"></g>
+          </svg>
+        </div>
+
+        <div class="mt-8 text-center">
+          <button id="animateArchBtn" class="px-6 py-3 bg-emerald-500/20 border border-emerald-500 rounded-lg text-emerald-400 font-semibold hover:bg-emerald-500/30 transition-all">
+            点击播放架构动画
+          </button>
+        </div>
+      </section>
+
+      <!-- Step 2: Embedding -->
+      <section id="step2" class="step-content hidden">
+        <div class="text-center mb-12">
+          <h2 class="text-3xl font-bold mb-4">词嵌入</h2>
+          <p class="text-slate-400 max-w-2xl mx-auto">
+            将输入文本转换为向量表示。每个词被映射到一个高维向量空间，捕捉语义信息。
+          </p>
+        </div>
+
+        <div class="bg-slate-900/50 rounded-2xl p-8 border border-slate-700/50">
+          <div class="mb-8">
+            <h3 class="text-lg font-semibold mb-4 text-emerald-400">输入句子</h3>
+            <div class="flex flex-wrap gap-2" id="inputTokens">
+              <span class="token" data-index="0">我</span>
+              <span class="token" data-index="1">喜欢</span>
+              <span class="token" data-index="2">学习</span>
+              <span class="token" data-index="3">AI</span>
+            </div>
+          </div>
+
+          <div class="mb-8">
+            <h3 class="text-lg font-semibold mb-4 text-amber-400">嵌入向量 (512维)</h3>
+            <div id="embeddingViz" class="space-y-4">
+              <!-- Will be populated by JS -->
+            </div>
+          </div>
+
+          <div class="formula text-center">
+            <span class="text-slate-400">Embedding = </span>
+            <span class="text-emerald-400">LookupTable</span>
+            <span class="text-slate-400">(</span>
+            <span class="text-amber-400">token_id</span>
+            <span class="text-slate-400">)</span>
+          </div>
+        </div>
+
+        <div class="mt-6 text-center">
+          <button id="animateEmbedBtn" class="px-6 py-3 bg-emerald-500/20 border border-emerald-500 rounded-lg text-emerald-400 font-semibold hover:bg-emerald-500/30 transition-all">
+            播放嵌入动画
+          </button>
+        </div>
+      </section>
+
+      <!-- Step 3: Positional Encoding -->
+      <section id="step3" class="step-content hidden">
+        <div class="text-center mb-12">
+          <h2 class="text-3xl font-bold mb-4">位置编码</h2>
+          <p class="text-slate-400 max-w-2xl mx-auto">
+            由于Transformer没有循环结构，需要通过位置编码注入序列位置信息。
+            使用正弦和余弦函数生成位置向量。
+          </p>
+        </div>
+
+        <div class="bg-slate-900/50 rounded-2xl p-8 border border-slate-700/50">
+          <div class="formula text-center mb-8">
+            <div class="text-slate-300 mb-2">
+              PE<sub>(pos, 2i)</sub> = sin(pos / 10000<sup>2i/d</sup>)
+            </div>
+            <div class="text-slate-300">
+              PE<sub>(pos, 2i+1)</sub> = cos(pos / 10000<sup>2i/d</sup>)
+            </div>
+          </div>
+
+          <div class="pe-wave mb-8">
+            <canvas id="peWaveCanvas" height="60"></canvas>
+          </div>
+
+          <div class="grid md:grid-cols-2 gap-8">
+            <div>
+              <h3 class="text-lg font-semibold mb-4 text-emerald-400">位置矩阵可视化</h3>
+              <canvas id="peMatrixCanvas" width="300" height="200"></canvas>
+            </div>
+            <div>
+              <h3 class="text-lg font-semibold mb-4 text-amber-400">位置编码效果</h3>
+              <div id="peEffectDemo" class="space-y-3">
+                <div class="flex items-center gap-4">
+                  <span class="w-16 text-sm text-slate-400">位置 0:</span>
+                  <div class="flex-1 h-4 bg-slate-800 rounded overflow-hidden">
+                    <div class="pe-bar h-full" style="width: 0%"></div>
+                  </div>
+                </div>
+                <div class="flex items-center gap-4">
+                  <span class="w-16 text-sm text-slate-400">位置 1:</span>
+                  <div class="flex-1 h-4 bg-slate-800 rounded overflow-hidden">
+                    <div class="pe-bar h-full" style="width: 0%"></div>
+                  </div>
+                </div>
+                <div class="flex items-center gap-4">
+                  <span class="w-16 text-sm text-slate-400">位置 2:</span>
+                  <div class="flex-1 h-4 bg-slate-800 rounded overflow-hidden">
+                    <div class="pe-bar h-full" style="width: 0%"></div>
+                  </div>
+                </div>
+                <div class="flex items-center gap-4">
+                  <span class="w-16 text-sm text-slate-400">位置 3:</span>
+                  <div class="flex-1 h-4 bg-slate-800 rounded overflow-hidden">
+                    <div class="pe-bar h-full" style="width: 0%"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Step 4: Self-Attention -->
+      <section id="step4" class="step-content hidden">
+        <div class="text-center mb-12">
+          <h2 class="text-3xl font-bold mb-4">自注意力机制</h2>
+          <p class="text-slate-400 max-w-2xl mx-auto">
+            自注意力让模型理解词与词之间的关系。每个词可以"注意"到序列中的其他所有词。
+          </p>
+        </div>
+
+        <div class="bg-slate-900/50 rounded-2xl p-8 border border-slate-700/50">
+          <div class="formula text-center mb-8">
+            <span class="text-amber-400">Attention(Q, K, V)</span>
+            <span class="text-slate-400"> = softmax(</span>
+            <span class="text-emerald-400">QK<sup>T</sup></span>
+            <span class="text-slate-400"> / √d<sub>k</sub>) </span>
+            <span class="text-amber-400">V</span>
+          </div>
+
+          <div class="grid md:grid-cols-3 gap-6 mb-8">
+            <div class="bg-slate-800/50 rounded-xl p-4 border border-emerald-500/30">
+              <h4 class="font-semibold text-emerald-400 mb-2">Query (Q)</h4>
+              <p class="text-sm text-slate-400">查询向量：我想要找什么</p>
+              <div class="mt-3 h-20 bg-slate-900/50 rounded-lg flex items-center justify-center">
+                <svg width="60" height="40" viewBox="0 0 60 40">
+                  <rect x="5" y="10" width="50" height="20" rx="4" fill="rgba(16, 185, 129, 0.3)" stroke="#10b981"/>
+                  <text x="30" y="25" text-anchor="middle" fill="#10b981" font-size="10">查询</text>
+                </svg>
+              </div>
+            </div>
+            <div class="bg-slate-800/50 rounded-xl p-4 border border-amber-500/30">
+              <h4 class="font-semibold text-amber-400 mb-2">Key (K)</h4>
+              <p class="text-sm text-slate-400">键向量：我是什么</p>
+              <div class="mt-3 h-20 bg-slate-900/50 rounded-lg flex items-center justify-center">
+                <svg width="60" height="40" viewBox="0 0 60 40">
+                  <rect x="5" y="10" width="50" height="20" rx="4" fill="rgba(245, 158, 11, 0.3)" stroke="#f59e0b"/>
+                  <text x="30" y="25" text-anchor="middle" fill="#f59e0b" font-size="10">索引</text>
+                </svg>
+              </div>
+            </div>
+            <div class="bg-slate-800/50 rounded-xl p-4 border border-cyan-500/30">
+              <h4 class="font-semibold text-cyan-400 mb-2">Value (V)</h4>
+              <p class="text-sm text-slate-400">值向量：我的内容</p>
+              <div class="mt-3 h-20 bg-slate-900/50 rounded-lg flex items-center justify-center">
+                <svg width="60" height="40" viewBox="0 0 60 40">
+                  <rect x="5" y="10" width="50" height="20" rx="4" fill="rgba(34, 211, 238, 0.3)" stroke="#22d3ee"/>
+                  <text x="30" y="25" text-anchor="middle" fill="#22d3ee" font-size="10">内容</text>
+                </svg>
+              </div>
+            </div>
+          </div>
+
+          <h3 class="text-lg font-semibold mb-4 text-center">注意力权重矩阵</h3>
+          <div class="flex justify-center mb-6">
+            <div class="attention-grid" id="attentionMatrix" style="grid-template-columns: repeat(4, 1fr);">
+              <!-- Will be populated by JS -->
+            </div>
+          </div>
+
+          <div class="flex justify-center gap-4 flex-wrap">
+            <button id="animateAttentionBtn" class="px-6 py-3 bg-emerald-500/20 border border-emerald-500 rounded-lg text-emerald-400 font-semibold hover:bg-emerald-500/30 transition-all">
+              演示注意力计算
+            </button>
+            <button id="resetAttentionBtn" class="px-6 py-3 bg-slate-700/50 border border-slate-600 rounded-lg text-slate-300 font-semibold hover:bg-slate-700 transition-all">
+              重置
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Step 5: Multi-Head Attention -->
+      <section id="step5" class="step-content hidden">
+        <div class="text-center mb-12">
+          <h2 class="text-3xl font-bold mb-4">多头注意力</h2>
+          <p class="text-slate-400 max-w-2xl mx-auto">
+            多头注意力让模型同时关注不同位置的不同表示子空间，捕捉多种语义关系。
+          </p>
+        </div>
+
+        <div class="bg-slate-900/50 rounded-2xl p-8 border border-slate-700/50">
+          <div class="formula text-center mb-8">
+            <span class="text-slate-400">MultiHead(Q,K,V) = Concat(head<sub>1</sub>, ..., head<sub>h</sub>)W<sup>O</sup></span>
+          </div>
+
+          <div class="head-container mb-8" id="multiHeadContainer">
+            <div class="attention-head" data-head="1">
+              <div class="head-label">Head 1 - 语法关系</div>
+              <div class="h-24 bg-slate-800/50 rounded flex items-center justify-center">
+                <canvas class="head-canvas" width="120" height="80"></canvas>
+              </div>
+            </div>
+            <div class="attention-head" data-head="2">
+              <div class="head-label">Head 2 - 语义关系</div>
+              <div class="h-24 bg-slate-800/50 rounded flex items-center justify-center">
+                <canvas class="head-canvas" width="120" height="80"></canvas>
+              </div>
+            </div>
+            <div class="attention-head" data-head="3">
+              <div class="head-label">Head 3 - 指代关系</div>
+              <div class="h-24 bg-slate-800/50 rounded flex items-center justify-center">
+                <canvas class="head-canvas" width="120" height="80"></canvas>
+              </div>
+            </div>
+            <div class="attention-head" data-head="4">
+              <div class="head-label">Head 4 - 位置关系</div>
+              <div class="h-24 bg-slate-800/50 rounded flex items-center justify-center">
+                <canvas class="head-canvas" width="120" height="80"></canvas>
+              </div>
+            </div>
+          </div>
+
+          <div class="bg-slate-800/50 rounded-xl p-6 border border-amber-500/30">
+            <h4 class="font-semibold text-amber-400 mb-4 text-center">注意力头融合</h4>
+            <div class="flex items-center justify-center gap-4 flex-wrap">
+              <div class="flex gap-2">
+                <div class="w-12 h-12 rounded-lg bg-emerald-500/30 border border-emerald-500 flex items-center justify-center text-xs">H1</div>
+                <div class="w-12 h-12 rounded-lg bg-amber-500/30 border border-amber-500 flex items-center justify-center text-xs">H2</div>
+                <div class="w-12 h-12 rounded-lg bg-cyan-500/30 border border-cyan-500 flex items-center justify-center text-xs">H3</div>
+                <div class="w-12 h-12 rounded-lg bg-rose-500/30 border border-rose-500 flex items-center justify-center text-xs">H4</div>
+              </div>
+              <svg width="40" height="40" viewBox="0 0 40 40">
+                <path d="M5 20 L35 20" stroke="#64748b" stroke-width="2" marker-end="url(#arrow)"/>
+                <defs>
+                  <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+                    <path d="M0,0 L0,6 L9,3 z" fill="#64748b"/>
+                  </marker>
+                </defs>
+              </svg>
+              <div class="w-16 h-16 rounded-lg bg-gradient-to-br from-emerald-500/50 via-amber-500/50 to-cyan-500/50 border border-white/30 flex items-center justify-center font-semibold">
+                输出
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="mt-6 text-center">
+          <button id="animateMultiHeadBtn" class="px-6 py-3 bg-emerald-500/20 border border-emerald-500 rounded-lg text-emerald-400 font-semibold hover:bg-emerald-500/30 transition-all">
+            演示多头注意力
+          </button>
+        </div>
+      </section>
+
+      <!-- Step 6: Full Pipeline -->
+      <section id="step6" class="step-content hidden">
+        <div class="text-center mb-12">
+          <h2 class="text-3xl font-bold mb-4">完整数据流</h2>
+          <p class="text-slate-400 max-w-2xl mx-auto">
+            观察数据如何在Transformer中流动，从输入到输出。
+          </p>
+        </div>
+
+        <div class="bg-slate-900/50 rounded-2xl p-8 border border-slate-700/50">
+          <canvas id="pipelineCanvas" width="800" height="400" class="w-full"></canvas>
+        </div>
+
+        <div class="mt-6 flex justify-center gap-4 flex-wrap">
+          <button id="playPipelineBtn" class="px-6 py-3 bg-emerald-500/20 border border-emerald-500 rounded-lg text-emerald-400 font-semibold hover:bg-emerald-500/30 transition-all">
+            播放完整流程
+          </button>
+          <button id="pausePipelineBtn" class="px-6 py-3 bg-slate-700/50 border border-slate-600 rounded-lg text-slate-300 font-semibold hover:bg-slate-700 transition-all">
+            暂停
+          </button>
+        </div>
+
+        <div class="mt-8 grid md:grid-cols-3 gap-6">
+          <div class="bg-slate-800/50 rounded-xl p-4">
+            <h4 class="font-semibold text-emerald-400 mb-2">编码器处理</h4>
+            <p class="text-sm text-slate-400">输入序列经过N层编码器，每层包含自注意力和前馈网络。</p>
+          </div>
+          <div class="bg-slate-800/50 rounded-xl p-4">
+            <h4 class="font-semibold text-amber-400 mb-2">交叉注意力</h4>
+            <p class="text-sm text-slate-400">解码器通过交叉注意力获取编码器的上下文信息。</p>
+          </div>
+          <div class="bg-slate-800/50 rounded-xl p-4">
+            <h4 class="font-semibold text-cyan-400 mb-2">输出生成</h4>
+            <p class="text-sm text-slate-400">最终通过线性层和Softmax生成概率分布。</p>
+          </div>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- Navigation Buttons -->
+    <div class="fixed bottom-8 left-0 right-0 flex justify-center gap-4 z-50">
+      <button id="prevBtn" class="px-6 py-3 bg-slate-800/90 border border-slate-600 rounded-lg text-slate-300 font-semibold hover:bg-slate-700 transition-all backdrop-blur-sm disabled:opacity-50 disabled:cursor-not-allowed">
+        上一步
+      </button>
+      <button id="nextBtn" class="px-6 py-3 bg-emerald-500/90 border border-emerald-400 rounded-lg text-emerald-100 font-semibold hover:bg-emerald-500 transition-all backdrop-blur-sm">
+        下一步
+      </button>
+    </div>
+  </div>
+
+  <script>
+    // ============ State Management ============
+    let currentStep = 1;
+    const totalSteps = 6;
+    let animationFrameId = null;
+    let isAnimating = false;
+
+    // ============ Background Particles ============
+    const bgCanvas = document.getElementById('bgCanvas');
+    const bgCtx = bgCanvas.getContext('2d');
+    let particles = [];
+
+    function initBgCanvas() {
+      bgCanvas.width = window.innerWidth;
+      bgCanvas.height = window.innerHeight;
+
+      particles = [];
+      const particleCount = Math.min(80, Math.floor(window.innerWidth / 20));
+
+      for (let i = 0; i < particleCount; i++) {
+        particles.push({
+          x: Math.random() * bgCanvas.width,
+          y: Math.random() * bgCanvas.height,
+          vx: (Math.random() - 0.5) * 0.5,
+          vy: (Math.random() - 0.5) * 0.5,
+          radius: Math.random() * 2 + 1,
+          alpha: Math.random() * 0.5 + 0.2
+        });
+      }
+    }
+
+    function animateBg() {
+      bgCtx.fillStyle = 'rgba(10, 15, 26, 0.1)';
+      bgCtx.fillRect(0, 0, bgCanvas.width, bgCanvas.height);
+
+      particles.forEach((p, i) => {
+        p.x += p.vx;
+        p.y += p.vy;
+
+        if (p.x < 0 || p.x > bgCanvas.width) p.vx *= -1;
+        if (p.y < 0 || p.y > bgCanvas.height) p.vy *= -1;
+
+        bgCtx.beginPath();
+        bgCtx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+        bgCtx.fillStyle = `rgba(16, 185, 129, ${p.alpha})`;
+        bgCtx.fill();
+
+        // Draw connections
+        particles.slice(i + 1).forEach(p2 => {
+          const dx = p.x - p2.x;
+          const dy = p.y - p2.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < 120) {
+            bgCtx.beginPath();
+            bgCtx.moveTo(p.x, p.y);
+            bgCtx.lineTo(p2.x, p2.y);
+            bgCtx.strokeStyle = `rgba(16, 185, 129, ${0.1 * (1 - dist / 120)})`;
+            bgCtx.stroke();
+          }
+        });
+      });
+
+      animationFrameId = requestAnimationFrame(animateBg);
+    }
+
+    // ============ Step Navigation ============
+    function updateStepNavigation() {
+      document.querySelectorAll('.step-btn').forEach((btn, i) => {
+        btn.classList.remove('active', 'completed');
+        if (i + 1 === currentStep) {
+          btn.classList.add('active');
+        } else if (i + 1 < currentStep) {
+          btn.classList.add('completed');
+        }
+      });
+
+      document.querySelectorAll('.step-content').forEach((section, i) => {
+        section.classList.toggle('hidden', i + 1 !== currentStep);
+      });
+
+      document.getElementById('stepIndicator').textContent = `步骤 ${currentStep} / ${totalSteps}`;
+      document.getElementById('progressFill').style.width = `${(currentStep / totalSteps) * 100}%`;
+
+      document.getElementById('prevBtn').disabled = currentStep === 1;
+      document.getElementById('nextBtn').textContent = currentStep === totalSteps ? '完成' : '下一步';
+
+      // Trigger step-specific animations
+      if (currentStep === 1) initStep1();
+      if (currentStep === 2) initStep2();
+      if (currentStep === 3) initStep3();
+      if (currentStep === 4) initStep4();
+      if (currentStep === 5) initStep5();
+      if (currentStep === 6) initStep6();
+    }
+
+    // ============ Step 1: Architecture Animation ============
+    function initStep1() {
+      // Reset
+      ['enc1', 'enc2', 'enc3', 'dec1', 'dec2', 'dec3', 'dec4', 'connection'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.setAttribute('opacity', '0');
+      });
+    }
+
+    document.getElementById('animateArchBtn')?.addEventListener('click', () => {
+      const elements = ['enc1', 'enc2', 'enc3', 'dec1', 'dec2', 'dec3', 'dec4'];
+      elements.forEach((id, i) => {
+        setTimeout(() => {
+          const el = document.getElementById(id);
+          if (el) {
+            el.setAttribute('opacity', '1');
+            // Add glow effect
+            const currentStroke = el.getAttribute('stroke');
+            el.style.filter = 'drop-shadow(0 0 10px currentColor)';
+          }
+        }, i * 300);
+      });
+
+      // Show connection
+      setTimeout(() => {
+        document.getElementById('connection').setAttribute('opacity', '1');
+      }, elements.length * 300);
+    });
+
+    // ============ Step 2: Embedding Animation ============
+    function initStep2() {
+      const embeddingViz = document.getElementById('embeddingViz');
+      if (!embeddingViz) return;
+      
+      embeddingViz.innerHTML = '';
+
+      const tokens = ['我', '喜欢', '学习', 'AI'];
+      const colors = ['#10b981', '#f59e0b', '#22d3ee', '#f472b6'];
+
+      tokens.forEach((token, i) => {
+        const row = document.createElement('div');
+        row.className = 'flex items-center gap-4';
+        row.innerHTML = `
+          <span class="w-12 text-sm text-slate-400">${token}</span>
+          <div class="flex-1 grid grid-cols-8 gap-1">
+            ${Array(8).fill(0).map((_, j) => `
+              <div class="h-6 rounded" style="background: ${colors[i]}; opacity: 0.2; transition: opacity 0.3s ease ${j * 50}ms;"></div>
+            `).join('')}
+          </div>
+        `;
+        embeddingViz.appendChild(row);
+      });
+    }
+
+    document.getElementById('animateEmbedBtn')?.addEventListener('click', () => {
+      document.querySelectorAll('#inputTokens .token').forEach((token, i) => {
+        setTimeout(() => {
+          token.classList.add('active');
+          // Animate corresponding embedding bars
+          const row = document.querySelectorAll('#embeddingViz > div')[i];
+          if (row) {
+            row.querySelectorAll('.grid > div').forEach((bar, j) => {
+              setTimeout(() => {
+                bar.style.opacity = 0.3 + Math.random() * 0.7;
+              }, j * 30);
+            });
+          }
+        }, i * 400);
+      });
+    });
+
+    // ============ Step 3: Positional Encoding ============
+    let peWaveAnimationId = null;
+
+    function initStep3() {
+      drawPEMatrix();
+      animatePEWave();
+    }
+
+    function drawPEMatrix() {
+      const canvas = document.getElementById('peMatrixCanvas');
+      if (!canvas) return;
+      
+      const ctx = canvas.getContext('2d');
+      const width = canvas.width;
+      const height = canvas.height;
+
+      ctx.fillStyle = '#1e293b';
+      ctx.fillRect(0, 0, width, height);
+
+      const cols = 50;
+      const rows = 20;
+      const cellW = width / cols;
+      const cellH = height / rows;
+
+      for (let pos = 0; pos < rows; pos++) {
+        for (let dim = 0; dim < cols; dim++) {
+          const angle = pos / Math.pow(10000, (2 * Math.floor(dim / 2)) / cols);
+          let value;
+          if (dim % 2 === 0) {
+            value = Math.sin(angle);
+          } else {
+            value = Math.cos(angle);
+          }
+
+          const hue = 160 + value * 40;
+          const lightness = 30 + value * 30;
+          ctx.fillStyle = `hsl(${hue}, 70%, ${lightness}%)`;
+          ctx.fillRect(dim * cellW, pos * cellH, cellW - 1, cellH - 1);
+        }
+      }
+    }
+
+    function animatePEWave() {
+      const canvas = document.getElementById('peWaveCanvas');
+      if (!canvas) return;
+      
+      const ctx = canvas.getContext('2d');
+      canvas.width = canvas.offsetWidth;
+      canvas.height = 60;
+
+      let phase = 0;
+
+      function draw() {
+        ctx.fillStyle = 'rgba(30, 41, 59, 0.3)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        const frequencies = [0.02, 0.04, 0.06, 0.08];
+        const colors = ['#10b981', '#22d3ee', '#f59e0b', '#f472b6'];
+
+        frequencies.forEach((freq, fi) => {
+          ctx.beginPath();
+          ctx.moveTo(0, canvas.height / 2);
+
+          for (let x = 0; x < canvas.width; x++) {
+            const y = canvas.height / 2 + Math.sin((x * freq) + phase + fi) * 20 * (1 - fi * 0.15);
+            ctx.lineTo(x, y);
+          }
+
+          ctx.strokeStyle = colors[fi];
+          ctx.lineWidth = 2;
+          ctx.globalAlpha = 0.6;
+          ctx.stroke();
+        });
+
+        ctx.globalAlpha = 1;
+        phase += 0.02;
+
+        peWaveAnimationId = requestAnimationFrame(draw);
+      }
+
+      draw();
+
+      // Animate bars
+      setTimeout(() => {
+        document.querySelectorAll('.pe-bar').forEach((bar, i) => {
+          setTimeout(() => {
+            bar.style.width = `${30 + Math.random() * 60}%`;
+            bar.style.background = `linear-gradient(90deg, #10b981, #f59e0b)`;
+          }, i * 200);
+        });
+      }, 500);
+    }
+
+    // ============ Step 4: Self-Attention ============
+    function initStep4() {
+      const matrix = document.getElementById('attentionMatrix');
+      if (!matrix) return;
+      
+      matrix.innerHTML = '';
+
+      const labels = ['我', '喜欢', '学习', 'AI'];
+
+      // Header row
+      matrix.appendChild(createAttentionCell('', '#1e293b'));
+      labels.forEach(label => {
+        matrix.appendChild(createAttentionCell(label, '#374151'));
+      });
+
+      // Data rows
+      labels.forEach((label, i) => {
+        matrix.appendChild(createAttentionCell(label, '#374151'));
+        labels.forEach((_, j) => {
+          const cell = createAttentionCell('0.00', 'rgba(30, 41, 59, 0.8)');
+          cell.dataset.row = i;
+          cell.dataset.col = j;
+          matrix.appendChild(cell);
+        });
+      });
+    }
+
+    function createAttentionCell(text, bg) {
+      const cell = document.createElement('div');
+      cell.className = 'attention-cell';
+      cell.textContent = text;
+      cell.style.background = bg;
+      return cell;
+    }
+
+    document.getElementById('animateAttentionBtn')?.addEventListener('click', () => {
+      // Simulate attention weights
+      const weights = [
+        [0.40, 0.30, 0.20, 0.10],
+        [0.25, 0.35, 0.25, 0.15],
+        [0.15, 0.25, 0.40, 0.20],
+        [0.10, 0.15, 0.25, 0.50]
+      ];
+
+      document.querySelectorAll('.attention-cell[data-row]').forEach(cell => {
+        const row = parseInt(cell.dataset.row);
+        const col = parseInt(cell.dataset.col);
+        const weight = weights[row][col];
+
+        setTimeout(() => {
+          const hue = 160 + (1 - weight) * 30;
+          const lightness = 20 + weight * 40;
+          cell.style.background = `hsl(${hue}, 70%, ${lightness}%)`;
+          cell.textContent = weight.toFixed(2);
+          cell.classList.add('matrix-value');
+          cell.style.animationDelay = `${(row * 4 + col) * 50}ms`;
+        }, (row * 4 + col) * 100);
+      });
+    });
+
+    document.getElementById('resetAttentionBtn')?.addEventListener('click', () => {
+      initStep4();
+    });
+
+    // ============ Step 5: Multi-Head Attention ============
+    function initStep5() {
+      const canvases = document.querySelectorAll('.head-canvas');
+      canvases.forEach((canvas, ci) => {
+        const ctx = canvas.getContext('2d');
+        drawHeadPattern(ctx, canvas.width, canvas.height, ci);
+      });
+    }
+
+    function drawHeadPattern(ctx, w, h, headIndex) {
+      ctx.fillStyle = '#1e293b';
+      ctx.fillRect(0, 0, w, h);
+
+      const patterns = [
+        // Head 1: Diagonal pattern
+        () => {
+          for (let i = 0; i < 4; i++) {
+            for (let j = 0; j < 4; j++) {
+              const intensity = (i === j) ? 0.8 : 0.2;
+              ctx.fillStyle = `rgba(16, 185, 129, ${intensity})`;
+              ctx.fillRect(j * 28 + 4, i * 18 + 4, 24, 14);
+            }
+          }
+        },
+        // Head 2: Cross pattern
+        () => {
+          for (let i = 0; i < 4; i++) {
+            for (let j = 0; j < 4; j++) {
+              const intensity = (i === 1 || j === 2) ? 0.7 : 0.15;
+              ctx.fillStyle = `rgba(245, 158, 11, ${intensity})`;
+              ctx.fillRect(j * 28 + 4, i * 18 + 4, 24, 14);
+            }
+          }
+        },
+        // Head 3: Corner pattern
+        () => {
+          for (let i = 0; i < 4; i++) {
+            for (let j = 0; j < 4; j++) {
+              const intensity = ((i < 2 && j < 2) || (i >= 2 && j >= 2)) ? 0.6 : 0.1;
+              ctx.fillStyle = `rgba(34, 211, 238, ${intensity})`;
+              ctx.fillRect(j * 28 + 4, i * 18 + 4, 24, 14);
+            }
+          }
+        },
+        // Head 4: Row pattern
+        () => {
+          for (let i = 0; i < 4; i++) {
+            for (let j = 0; j < 4; j++) {
+              const intensity = 0.3 + Math.sin((i + j) * 0.8) * 0.4;
+              ctx.fillStyle = `rgba(244, 114, 182, ${Math.max(0.1, intensity)})`;
+              ctx.fillRect(j * 28 + 4, i * 18 + 4, 24, 14);
+            }
+          }
+        }
+      ];
+
+      if (patterns[headIndex]) {
+        patterns[headIndex]();
+      }
+    }
+
+    document.getElementById('animateMultiHeadBtn')?.addEventListener('click', () => {
+      const heads = document.querySelectorAll('.attention-head');
+      heads.forEach((head, i) => {
+        setTimeout(() => {
+          head.style.borderColor = '#10b981';
+          head.style.boxShadow = '0 0 20px rgba(16, 185, 129, 0.3)';
+          head.style.transform = 'translateY(-4px) scale(1.02)';
+
+          setTimeout(() => {
+            head.style.borderColor = '';
+            head.style.boxShadow = '';
+            head.style.transform = '';
+          }, 500);
+        }, i * 200);
+      });
+    });
+
+    // ============ Step 6: Full Pipeline ============
+    let pipelineAnimationId = null;
+
+    function initStep6() {
+      const canvas = document.getElementById('pipelineCanvas');
+      if (!canvas) return;
+      
+      const ctx = canvas.getContext('2d');
+      drawPipeline(ctx, canvas.width, canvas.height);
+    }
+
+    function drawPipeline(ctx, w, h) {
+      ctx.fillStyle = '#0f172a';
+      ctx.fillRect(0, 0, w, h);
+
+      // Draw blocks
+      const blocks = [
+        { x: 50, y: 180, w: 80, h: 40, label: 'Input', color: '#64748b' },
+        { x: 160, y: 180, w: 80, h: 40, label: 'Embed', color: '#10b981' },
+        { x: 270, y: 180, w: 80, h: 40, label: 'Encoder', color: '#10b981' },
+        { x: 380, y: 180, w: 80, h: 40, label: 'Context', color: '#f59e0b' },
+        { x: 490, y: 180, w: 80, h: 40, label: 'Decoder', color: '#22d3ee' },
+        { x: 600, y: 180, w: 80, h: 40, label: 'Linear', color: '#f472b6' },
+        { x: 710, y: 180, w: 80, h: 40, label: 'Output', color: '#10b981' }
+      ];
+
+      blocks.forEach(block => {
+        ctx.fillStyle = block.color + '33';
+        ctx.strokeStyle = block.color;
+        ctx.lineWidth = 2;
+        roundRect(ctx, block.x, block.y, block.w, block.h, 8);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = block.color;
+        ctx.font = '12px "Noto Sans SC"';
+        ctx.textAlign = 'center';
+        ctx.fillText(block.label, block.x + block.w / 2, block.y + block.h / 2 + 4);
+      });
+
+      // Draw arrows
+      ctx.strokeStyle = '#64748b';
+      ctx.lineWidth = 2;
+      for (let i = 0; i < blocks.length - 1; i++) {
+        const from = blocks[i];
+        const to = blocks[i + 1];
+        drawArrow(ctx, from.x + from.w, from.y + from.h / 2, to.x, to.y + to.h / 2);
+      }
+    }
+
+    function roundRect(ctx, x, y, w, h, r) {
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.lineTo(x + w - r, y);
+      ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+      ctx.lineTo(x + w, y + h - r);
+      ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+      ctx.lineTo(x + r, y + h);
+      ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+      ctx.lineTo(x, y + r);
+      ctx.quadraticCurveTo(x, y, x + r, y);
+      ctx.closePath();
+    }
+
+    function drawArrow(ctx, fromX, fromY, toX, toY) {
+      const headLen = 10;
+      const angle = Math.atan2(toY - fromY, toX - fromX);
+
+      ctx.beginPath();
+      ctx.moveTo(fromX, fromY);
+      ctx.lineTo(toX, toY);
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.moveTo(toX, toY);
+      ctx.lineTo(toX - headLen * Math.cos(angle - Math.PI / 6), toY - headLen * Math.sin(angle - Math.PI / 6));
+      ctx.lineTo(toX - headLen * Math.cos(angle + Math.PI / 6), toY - headLen * Math.sin(angle + Math.PI / 6));
+      ctx.closePath();
+      ctx.fillStyle = '#64748b';
+      ctx.fill();
+    }
+
+    document.getElementById('playPipelineBtn')?.addEventListener('click', () => {
+      const canvas = document.getElementById('pipelineCanvas');
+      if (!canvas) return;
+      
+      const ctx = canvas.getContext('2d');
+      let dataX = 50;
+      let targetX = 790;
+      const speed = 3;
+
+      function animateData() {
+        drawPipeline(ctx, canvas.width, canvas.height);
+
+        // Draw moving data particle
+        ctx.beginPath();
+        ctx.arc(dataX, 200, 8, 0, Math.PI * 2);
+        const gradient = ctx.createRadialGradient(dataX, 200, 0, dataX, 200, 12);
+        gradient.addColorStop(0, '#10b981');
+        gradient.addColorStop(1, 'rgba(16, 185, 129, 0)');
+        ctx.fillStyle = gradient;
+        ctx.fill();
+
+        // Trail effect
+        for (let i = 1; i < 5; i++) {
+          ctx.beginPath();
+          ctx.arc(dataX - i * 15, 200, 6 - i, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(16, 185, 129, ${0.3 - i * 0.05})`;
+          ctx.fill();
+        }
+
+        dataX += speed;
+        if (dataX < targetX) {
+          pipelineAnimationId = requestAnimationFrame(animateData);
+        } else {
+          dataX = 50;
+        }
+      }
+
+      animateData();
+    });
+
+    document.getElementById('pausePipelineBtn')?.addEventListener('click', () => {
+      if (pipelineAnimationId) {
+        cancelAnimationFrame(pipelineAnimationId);
+      }
+    });
+
+    // ============ Event Listeners ============
+    document.querySelectorAll('.step-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        currentStep = parseInt(btn.dataset.step);
+        updateStepNavigation();
+      });
+    });
+
+    document.getElementById('prevBtn').addEventListener('click', () => {
+      if (currentStep > 1) {
+        currentStep--;
+        updateStepNavigation();
+      }
+    });
+
+    document.getElementById('nextBtn').addEventListener('click', () => {
+      if (currentStep < totalSteps) {
+        currentStep++;
+        updateStepNavigation();
+      }
+    });
+
+    // ============ Resize Handler ============
+    window.addEventListener('resize', () => {
+      initBgCanvas();
+      if (currentStep === 3) {
+        const waveCanvas = document.getElementById('peWaveCanvas');
+        if (waveCanvas) {
+          waveCanvas.width = waveCanvas.offsetWidth;
+        }
+      }
+    });
+
+    // ============ Initialize ============
+    document.addEventListener('DOMContentLoaded', () => {
+      initBgCanvas();
+      animateBg();
+      updateStepNavigation();
+    });
+
+    // Cleanup on page hide
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        if (animationFrameId) cancelAnimationFrame(animationFrameId);
+        if (peWaveAnimationId) cancelAnimationFrame(peWaveAnimationId);
+        if (pipelineAnimationId) cancelAnimationFrame(pipelineAnimationId);
+      } else {
+        animateBg();
+      }
+    });
+  </script>
+</body>
+</html>
